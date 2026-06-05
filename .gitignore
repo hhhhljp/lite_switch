@@ -1,0 +1,3 @@
+# Redis persists data files
+dump.rdb
+appendonly.aof
