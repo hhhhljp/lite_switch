@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package test;
+
+// 测试用消息定义（proto3 风格，无 required/optional 关键字）
+
+// 测试定位Key
+message Light_TestKey {
+  string test_name = 1;  // 测试名称
+  uint32 test_id   = 2;  // 测试编号
+}
+
+/**
+ * 测试消息体
+ * @index: 测试定位key
+ * @test_name: 测试名称
+ * @data: 测试数据（字符串）
+ * @data_len: 字符串长度
+ */
+message Light_TestEntry {
+  Light_TestKey index     = 1;  // 测试定位key
+  string        test_name = 2;  // 测试名称
+  string        data      = 3;  // 测试数据（payload）
+  uint32        data_len  = 4;  // 字符串长度
+}
