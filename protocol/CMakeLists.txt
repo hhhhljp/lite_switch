@@ -49,3 +49,6 @@ add_library(light_protocol STATIC ${GEN_SRCS})
 add_dependencies(light_protocol proto_generate)
 target_include_directories(light_protocol PUBLIC ${INCLUDE_DIR})
 target_link_libraries(light_protocol PUBLIC ${PROTOBUF_C_LIBRARIES})
+
+# ── CLI（proto-aware Redis 客户端，依赖 proto 编译产物） ──
+add_subdirectory(cli)

@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package pd_interface;
+
+/*
+ * interface.proto — 物理接口描述
+ *
+ * Key:    sw + port 唯一标识一个物理口
+ * Entry:  物理属性 + 链路状态（枚举值与 SDK 一致，可直接 cast）
+ */
+
+/* ── 接口速率（枚举值 = SDK Mbps 值，可直接 cast） ── */
+enum PdInterfaceSpeed {
+    SPEED_UNKNOWN = 0;
+    SPEED_10M     = 10;
+    SPEED_100M    = 100;
+    SPEED_1G      = 1000;
+    SPEED_2500M   = 2500;
+    SPEED_5G      = 5000;
+    SPEED_10G     = 10000;
+    SPEED_20G     = 20000;
+    SPEED_25G     = 25000;
+    SPEED_40G     = 40000;
+    SPEED_100G    = 100000;
+}
+
+/* ── 管理模式（枚举值 = SDK 值，可直接 cast） ── */
+enum PdInterfaceAdminMode {
+    ADMIN_UP      = 0;
+    ADMIN_DOWN    = 1;
+    ADMIN_PWRDOWN = 2;
+    ADMIN_BIST    = 3;
+}
+
+/* ── 链路状态（枚举值 = SDK 值，可直接 cast） ── */
+enum PdInterfaceLinkState {
+    LINK_UP           = 0;
+    LINK_REMOTE_FAULT = 4;
+    LINK_DOWN         = 5;
+    LINK_PARTIALLY_UP = 6;
+    LINK_LOCAL_FAULT  = 7;
+    LINK_DFE_TUNING   = 8;
+}
+
+/* ── Key — 物理接口定位 ── */
+message PdInterfaceKey {
+    uint32 sw   = 1;
+    uint32 port = 2;
+}
+
+/* ── Per-lane 硬件信号 ── */
+message PdInterfaceLaneInfo {
+    uint32 rx_pll    = 1;   /* Rx PLL locked */
+    uint32 tx_pll    = 2;   /* Tx PLL locked */
+    uint32 signal    = 3;   /* Signal strength (0-3) */
+    uint32 align     = 4;   /* Word alignment */
+    uint32 auto_det  = 5;   /* Auto-detection */
+    uint32 mismatch  = 6;   /* Speed mismatch */
+}
+
+/**
+ * 物理接口消息体
+ */
+message PdInterfaceEntry {
+    PdInterfaceKey              index      = 1;
+    string                      port_name  = 2;
+    PdInterfaceSpeed            speed      = 3;
+    PdInterfaceAdminMode        admin_mode = 4;
+    PdInterfaceLinkState        link_state = 5;
+    uint32                      mtu        = 6;
+    string                      mac_addr   = 7;
+    uint32                      num_lanes  = 8;
+    repeated PdInterfaceLaneInfo lanes      = 9;
+}

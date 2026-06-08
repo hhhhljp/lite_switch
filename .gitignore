@@ -1,3 +1,25 @@
 # Redis persists data files
 dump.rdb
 appendonly.aof
+
+# Build artifacts
+modules/build/
+protocol/build/
+middleware/build/
+*.log
+
+# CMake cache
+.cache/
+modules/.cache/
+
+# Proto generated code
+protocol/include/
+
+# LSP indexing
+compile_commands.json
+
+# SDK (第三方，按需从硬件工程拷贝)
+modules/3.PD/4.SDA/sdk/
+
+#  Auto-generated proto registry (gen_proto_registry.sh)
+protocol/cli/proto_registry.c

@@ -12,7 +12,6 @@ static void entry_init(Test__LightTestKey *key, Test__LightTestEntry *entry)
   *key = k;
 
   Test__LightTestEntry e = TEST__LIGHT__TEST_ENTRY__INIT;
-  e.index     = key;
   e.test_name = "lightentry";
   e.data      = "hello world";
   e.data_len  = sizeof("hello world");

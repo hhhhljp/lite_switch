@@ -56,15 +56,16 @@ lite_switch/
 │   └── src/middleware.c        # 基于 hiredis + protobuf-c 实现
 ├── protocol/                   # Protobuf 定义与编译 (liblight_protocol.a)
 │   ├── proto/                  # .proto 源文件
-│   └── include/                # 编译产物（自动生成）
+│   ├── include/                # 编译产物（自动生成）
+│   └── cli/                    # redis-cli-proto（proto 感知 CLI 诊断工具）
 └── modules/                    # 各层模块
     ├── 1.UI/                   # 用户接口层（待实现）
     ├── 2.PI/                   # 协议控制层（待实现）
     ├── 3.PD/                   # 数据处理层
     │   ├── 3.test/             # Pub/Sub 回调模型验证
     │   │   ├── publisher/      # SET → sleep → DEL
-    │   │   └── receiver/       # 订阅 keyspace → 回调打印
-    │   └── 4.SDA/              # SDK 透传层（待实现）
+    │   │   └── receiver/       # 订阅 keyspace → 回调打印（含 index 验证）
+    │   └── 4.SDA/              # SDK 透传守护进程
     ├── 4.SDA/                  # 硬件适配层（待实现）
     └── CMakeLists.txt          # 顶层构建入口
 ```
@@ -130,6 +131,26 @@ redis-server --daemonize yes
 ```
 
 publisher 会发送一条消息（SET），等待 3 秒后删除（DEL），receiver 将打印收到的消息并在收到 DEL 事件后退出。
+
+### redis-cli-proto 诊断
+
+基于 Redis 8.0.5 原生 CLI + protobuf 反射，零硬编码：
+
+```bash
+# 启动 proto 模式 REPL
+./modules/build/bin/redis-cli-proto --proto
+
+# 查看接口数据（自动翻译 key/value）
+GET "s_pd_interface/sw=0,port=1"
+
+# 修改接口配置（key + value 均从人类可读编码）
+SET "s_pd_interface/sw=0,port=2" "admin_mode=ADMIN_DOWN,link_state=LINK_DOWN,mtu=1500"
+
+# 监控 proto 消息（紧凑单行显示）
+MONITOR
+```
+
+详见 [`protocol/README.md`](protocol/README.md)。
 
 ## 添加新模块
 

@@ -3,9 +3,12 @@
 # build.sh — 工程编译 / 清理控制脚本
 #
 # 用法:
-#   ./build.sh             # 编译（默认 Debug）
+#   ./build.sh             # 仿真环境 Debug 编译（默认）
 #   ./build.sh build       # 同上
-#   ./build.sh release     # Release 编译
+#   ./build.sh debug       # 同上
+#   ./build.sh hw          # 真实硬件环境 Debug 编译
+#   ./build.sh release     # 仿真环境 Release 编译
+#   ./build.sh release-hw  # 真实硬件环境 Release 编译
 #   ./build.sh clean       # 清理所有编译产物和生成文件
 #
 set -euo pipefail
@@ -34,6 +37,10 @@ do_clean() {
     # protobuf-c 生成产物 (protocol/include/)
     rm -rf "${ROOT}/protocol/include"
 
+    # redis-cli-proto 中间产物
+    rm -rf /tmp/redis-src
+    rm -f "${ROOT}/protocol/cli/proto_registry.c"
+
     echo "    清理完成。"
 }
 
@@ -41,17 +48,33 @@ do_clean() {
 # 编译
 # ──────────────────────────────────────────────
 do_build() {
-    local build_type="${1:-Debug}"
+    local build_type="$1"    # Debug | Release
+    local sda_no_hw="$2"     # ON=仿真  OFF=真实硬件
 
-    echo "==> CMake 配置 (${build_type})..."
+    local mode_label
+    if [ "$sda_no_hw" = "ON" ]; then
+        mode_label="仿真"
+    else
+        mode_label="硬件"
+    fi
+
+    echo "==> CMake 配置 (${build_type}, ${mode_label}环境)..."
     cmake -S "${ROOT}/modules" \
           -B "${BUILD_DIR}" \
           -DCMAKE_BUILD_TYPE="${build_type}" \
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DSDA_NO_HW="${sda_no_hw}"
 
     echo ""
     echo "==> 开始编译..."
     cmake --build "${BUILD_DIR}" -- -j"$(nproc)"
+
+    # 编译 redis-cli-proto（依赖 proto 生成产物）
+    if [ -f "${ROOT}/protocol/include/test/test.pb-c.c" ]; then
+        echo ""
+        echo "==> 编译 redis-cli-proto..."
+        cmake --build "${BUILD_DIR}" --target redis_cli_proto 2>&1 | tail -5
+    fi
 
     echo ""
     echo "==> 编译完成。"
@@ -63,17 +86,23 @@ do_build() {
 # 入口
 # ──────────────────────────────────────────────
 case "${1:-build}" in
-    build|debug)
-        do_build Debug
+    build|debug|sim)
+        do_build Debug ON
+        ;;
+    hw)
+        do_build Debug OFF
         ;;
     release)
-        do_build Release
+        do_build Release ON
+        ;;
+    release-hw)
+        do_build Release OFF
         ;;
     clean)
         do_clean
         ;;
     *)
-        echo "用法: $0 {build|release|clean}"
+        echo "用法: $0 {build|debug|sim|hw|release|release-hw|clean}"
         exit 1
         ;;
 esac

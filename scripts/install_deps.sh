@@ -21,6 +21,7 @@ apt install -y \
     cmake \
     pkg-config \
     libhiredis-dev \
+    libreadline-dev \
     protobuf-compiler \
     protobuf-c-compiler \
     libprotobuf-c-dev \

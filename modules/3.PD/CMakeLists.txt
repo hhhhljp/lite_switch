@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(test C)
+project(lite_switch_pd C)
 
 set(_d "${CMAKE_CURRENT_SOURCE_DIR}")
 while(NOT EXISTS "${_d}/cmake/aggregate.cmake")

@@ -11,7 +11,8 @@ typedef struct {
   char            *key_prefix;  /* namespace 前缀，如 "s_test/" */
   uint8_t         *key_packed;  /* 打包后的 proto key 二进制 */
   size_t           key_len;     /* 打包长度 */
-  const ProtobufCMessageDescriptor *val_desc; /* value descriptor（反序列化用） */
+  const ProtobufCMessageDescriptor *key_desc;  /* key descriptor */
+  const ProtobufCMessageDescriptor *val_desc;  /* value descriptor（反序列化用） */
   mw_notify_cb     cb;          /* 回调函数 */
 } mw_cb_entry;
 
@@ -366,6 +367,7 @@ int mw_subscribe_keys(mw_context_t *ctx,
     e->key_prefix = mw_make_prefix(in->key_msg);
     e->key_packed = packed;
     e->key_len    = klen;
+    e->key_desc   = in->key_msg->descriptor;
     e->val_desc   = in->entry_msg->descriptor;
     e->cb         = in->cb;
     ctx->cb_count++;
@@ -466,6 +468,35 @@ static int mw_poll_one(mw_context_t *ctx)
         if (gr && gr->type == REDIS_REPLY_STRING) {
           value = protobuf_c_message_unpack(e->val_desc, NULL,
                                             gr->len, (uint8_t *)gr->str);
+          /* 从 Redis key 中解析 key 子消息，重建 entry->index
+           *（避免 value 中存储冗余 index，index 始终与 key 对齐） */
+          if (value && e->key_desc && e->key_prefix) {
+            const char  *channel    = reply->element[2]->str;
+            size_t       channel_len = reply->element[2]->len;
+            size_t       rkey_off    = (size_t)(rkey - channel);
+            size_t       plen        = strlen(e->key_prefix);
+            size_t       klen        = channel_len - rkey_off - plen;
+            const char  *kdata       = rkey + plen;
+            ProtobufCMessage *kmsg = protobuf_c_message_unpack(
+                e->key_desc, NULL, klen, (const uint8_t *)kdata);
+            if (kmsg) {
+              const ProtobufCMessageDescriptor *vd = e->val_desc;
+              for (unsigned j = 0; j < vd->n_fields; j++) {
+                const ProtobufCFieldDescriptor *fd = &vd->fields[j];
+                if (fd->type == PROTOBUF_C_TYPE_MESSAGE
+                    && strcmp(fd->name, "index") == 0) {
+                  uint8_t *base = (uint8_t *)value;
+                  void **ptr = (void **)(base + fd->offset);
+                  if (*ptr)
+                    protobuf_c_message_free_unpacked((ProtobufCMessage *)*ptr, NULL);
+                  *ptr = kmsg;
+                  if (fd->label == PROTOBUF_C_LABEL_OPTIONAL)
+                    *(protobuf_c_boolean *)(base + fd->quantifier_offset) = 1;
+                  break;
+                }
+              }
+            }
+          }
         }
         if (gr) freeReplyObject(gr);
       }

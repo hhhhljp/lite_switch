@@ -1,4 +1,4 @@
-#include "test/test.pb-c.h"
+#include "PD/interface/interface.pb-c.h"
 #include "middleware.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,27 +6,33 @@
 
 static mw_context_t *g_ctx;
 
-/* ── proto 静态定义 ── */
-static Test__LightTestKey   g_test_key   = TEST__LIGHT__TEST_KEY__INIT;
-static Test__LightTestEntry g_test_entry = TEST__LIGHT__TEST_ENTRY__INIT;
+/* ── proto 静态定义 （INIT = 全默认值，packed 0 字节 → 匹配全部 s_pd_interface/*）── */
+static PdInterface__PdInterfaceKey   g_pd_key   = PD_INTERFACE__PD_INTERFACE_KEY__INIT;
+static PdInterface__PdInterfaceEntry g_pd_entry = PD_INTERFACE__PD_INTERFACE_ENTRY__INIT;
 
-/* ── 统一的 set/del 回调 ──
- * set: value 指向 Test__LightTestEntry，key 从 entry->index 获取
- * del: value 为 NULL */
-static void on_light_event(const char *event, void *value, void *arg)
+/* ── 回调 ── */
+static void on_pd_event(const char *event, void *value, void *arg)
 {
     (void)arg;
 
     if (strcmp(event, "set") == 0) {
-        Test__LightTestEntry *entry = (Test__LightTestEntry *)value;
+        PdInterface__PdInterfaceEntry *entry = (PdInterface__PdInterfaceEntry *)value;
         if (entry && entry->index) {
-            printf("[SET] test_name=%s  test_id=%u  |  data=%s  data_len=%u\n",
-                   entry->index->test_name, entry->index->test_id,
-                   entry->data, entry->data_len);
+            printf("[SET] key: sw=%u  port=%u  |  "
+                   "entry: port_name=%s  speed=%d  admin=%d  link=%d  mtu=%u  mac=%s\n",
+                   entry->index->sw, entry->index->port,
+                   entry->port_name ? entry->port_name : "",
+                   (int)entry->speed,
+                   (int)entry->admin_mode,
+                   (int)entry->link_state,
+                   entry->mtu,
+                   entry->mac_addr ? entry->mac_addr : "");
+        } else {
+            printf("[SET] MISSING index! entry=%p\n", (void *)entry);
         }
         mw_free_message((ProtobufCMessage *)entry);
     } else if (strcmp(event, "del") == 0) {
-        printf("[DEL] Received del event, exiting...\n");
+        printf("[DEL] exiting...\n");
         mw_disconnect(g_ctx);
         exit(0);
     }
@@ -42,19 +48,18 @@ int main(void)
     }
     printf("Connected to Redis\n");
 
-    /* 回调注册表 — 使用 g_test_entry 自身承载 descriptor */
     mw_callback_entry callbacks[] = {
         {
-            .key_msg   = (const ProtobufCMessage *)&g_test_key,
-            .entry_msg = (const ProtobufCMessage *)&g_test_entry,
-            .cb        = on_light_event,
+            .key_msg   = (const ProtobufCMessage *)&g_pd_key,
+            .entry_msg = (const ProtobufCMessage *)&g_pd_entry,
+            .cb        = on_pd_event,
         },
     };
 
     mw_subscribe_keys(g_ctx, callbacks,
                       sizeof(callbacks) / sizeof(callbacks[0]));
 
-    printf("Waiting for events...\n");
+    printf("Waiting for PdInterface events...\n");
     while (1) {
         mw_poll(g_ctx, -1);
     }
