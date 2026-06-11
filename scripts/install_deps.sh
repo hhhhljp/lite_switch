@@ -24,6 +24,7 @@ apt install -y \
     cmake \
     pkg-config \
     libreadline-dev \
+    python3 \
     protobuf-compiler \
     protobuf-c-compiler \
     libprotobuf-c-dev \

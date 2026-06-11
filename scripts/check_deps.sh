@@ -53,6 +53,7 @@ echo "==> 校验编译工具链..."
 check_cmd cmake
 check_cmd gcc
 check_cmd pkg-config
+check_cmd python3
 
 echo ""
 echo "==> 校验系统库..."
