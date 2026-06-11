@@ -29,3 +29,5 @@ protocol/cli/proto_registry.c
 
 # Git submodules (tracked via .gitmodules)
 deps/
+
+scripts/sdk_headers.tar.gz

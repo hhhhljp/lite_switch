@@ -7,6 +7,8 @@
 #
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
 if [ "$(id -u)" -ne 0 ]; then
     echo "请使用 sudo 运行: sudo ./scripts/install_deps.sh"
     exit 1
@@ -16,11 +18,11 @@ echo "==> 安装 lite_switch 编译依赖..."
 
 apt update
 
+# hiredis / zlog 通过 git submodule 提供，无需 apt 安装
 apt install -y \
     build-essential \
     cmake \
     pkg-config \
-    # hiredis: git submodule (deps/hiredis) \
     libreadline-dev \
     protobuf-compiler \
     protobuf-c-compiler \
@@ -52,6 +54,28 @@ else
     else
         echo "    [WARN] Redis 启动失败，请手动启动后重试。"
     fi
+fi
+
+echo ""
+echo "==> 部署 Intel FM10840 SDK 头文件..."
+SDK_TAR="${ROOT}/scripts/sdk_headers.tar.gz"
+SDK_DIR="${ROOT}/modules/3.PD/4.SDA/sdk"
+
+if [ -d "${SDK_DIR}/include" ] && [ -f "${SDK_DIR}/include/fm_sdk.h" ]; then
+    echo "    SDK 头文件已部署，跳过。"
+elif [ -f "${SDK_TAR}" ]; then
+    echo "    解压 SDK 头文件到 ${SDK_DIR}..."
+    mkdir -p "${SDK_DIR}"
+    tar xzf "${SDK_TAR}" -C "${ROOT}/modules/3.PD/4.SDA/"
+    if [ -f "${SDK_DIR}/include/fm_sdk.h" ]; then
+        echo "    SDK 头文件部署完成。"
+    else
+        echo "    [ERROR] SDK 解压失败，请检查压缩包完整性。"
+        exit 1
+    fi
+else
+    echo "    [SKIP] ${SDK_TAR} 不存在"
+    echo "    请从开发机拷贝 sdk_headers.tar.gz 到 ${ROOT}/scripts/ 后重新执行。"
 fi
 
 echo ""
