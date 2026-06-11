@@ -82,7 +82,7 @@ modules/build/bin/
 ├── receiver            # Pub/Sub 回调验证
 ├── scanner             # mw_scan 存量发现
 ├── sda                 # SDK 透传守护进程
-├── switch-web          # Web 状态页面 (端口 8080)
+├── switch-web          # Web 状态页面（端口 8080）
 └── redis-cli-proto     # Proto 感知 CLI 诊断工具
 ```
 
