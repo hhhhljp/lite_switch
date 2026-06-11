@@ -1,0 +1,6 @@
+[submodule "deps/hiredis"]
+	path = deps/hiredis
+	url = https://github.com/redis/hiredis.git
+[submodule "deps/zlog"]
+	path = deps/zlog
+	url = https://github.com/HardySimpson/zlog.git

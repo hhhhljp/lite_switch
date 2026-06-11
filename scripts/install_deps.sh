@@ -20,7 +20,7 @@ apt install -y \
     build-essential \
     cmake \
     pkg-config \
-    libhiredis-dev \
+    # hiredis: git submodule (deps/hiredis) \
     libreadline-dev \
     protobuf-compiler \
     protobuf-c-compiler \

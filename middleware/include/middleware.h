@@ -48,6 +48,35 @@ void mw_disconnect(mw_context_t *ctx);
  */
 int mw_select_db(mw_context_t *ctx, int db);
 
+/**
+ * 获取 Redis Pub/Sub 连接的 fd（用于 select/poll 多路复用）
+ *
+ * 若 sub_conn 尚未创建（mw_poll 延迟懒订阅），返回 -1。
+ * 调用方应在首次 mw_poll 之后再调用此函数。
+ *
+ * @return: fd (>=0)，尚未就绪时返回 -1
+ */
+int mw_get_sub_fd(mw_context_t *ctx);
+
+/* ── 日志初始化 ── */
+
+/**
+ * 初始化 zlog 日志系统
+ *
+ * 每个进程应在启动时调用一次（在 mw_connect 之前或之后均可）。
+ * 自动创建 /tmp/lite-switch/<proc_name>/ 目录，
+ * 生成该进程专属的 zlog.conf 并初始化 dzlog。
+ *
+ * 初始化后即可在代码中直接使用 zlog 宏：
+ *   zlog_info(zc, "message");
+ *   zlog_error(zc, "error: %d", err);
+ *
+ * @proc_name: 进程名称（如 "sda", "publisher", "receiver"）
+ *             日志将写入 /tmp/lite-switch/<proc_name>/<proc_name>.log
+ * @return: 0 成功，非 0 失败
+ */
+int mw_log_init(const char *proc_name);
+
 /* ── Key-Value 操作（protobuf 二进制数据） ── */
 
 /**
@@ -174,6 +203,39 @@ int mw_subscribe_keys(mw_context_t *ctx,
  * @return: >0 收到消息数，0 超时/无消息，<0 错误
  */
 int mw_poll(mw_context_t *ctx, int timeout_ms);
+
+/* ── 批量扫描（历史数据发现） ── */
+
+/**
+ * 扫描注册项
+ *
+ * 仅指定要扫描的 proto 类型，不绑定回调。
+ * 回调匹配由 mw_subscribe_keys 注册的 mw_callback_entry 负责，
+ * mw_scan 只做 SCAN + GET + unpack → 入队，后续 mw_poll 统一驱动回调。
+ *
+ *  - key_msg:   提取 package 名称，构造 SCAN 模式 "s_{package} / *"
+ *  - entry_msg: 反序列化 value 的模板 descriptor
+ */
+typedef struct {
+    const ProtobufCMessage *key_msg;
+    const ProtobufCMessage *entry_msg;
+} mw_scan_entry;
+
+/**
+ * 串行阻塞扫描 Redis 存量 key（仅入队，不触发回调）
+ *
+ * 按 entries[] 先后顺序逐个扫描，前一个 entry 对应 prefix 下的所有 key
+ * 扫描完毕（SCAN cursor 归零）后才会进入下一个 entry。
+ *
+ * 每发现一个匹配 key 即 GET → unpack → rebuild_index → 暂存到内部事件队列。
+ * 队列中的事件由后续 mw_poll() 统一消费，与 Pub/Sub 消息混合投递，
+ * 匹配到已注册的 mw_callback_entry 后触发对应回调。
+ *
+ * @entries: 扫描注册项数组
+ * @count:   数组长度
+ * @return:  入队的事件数量，<0 表示失败
+ */
+int mw_scan(mw_context_t *ctx, const mw_scan_entry *entries, int count);
 
 /* ── 资源释放 ── */
 

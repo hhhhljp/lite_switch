@@ -34,7 +34,7 @@ python3 "${SCRIPT_DIR}/patch_redis_cli.py" src/redis-cli.c
 # ── Step 5: Patch Makefile ──
 echo "==> Patching Makefile..."
 sed -i 's/\(REDIS_CLI_OBJ=.*cli_commands.o\)/\1 cli_proto.o/' src/Makefile
-sed -i "/FINAL_CFLAGS+=.*hdr_histogram.*fast_float\$/a FINAL_CFLAGS+= \$(shell pkg-config --cflags libprotobuf-c 2>/dev/null) -I${PROTOCOL_DIR}" src/Makefile
+sed -i "/FINAL_CFLAGS+=.*hdr_histogram.*fast_float\$/a FINAL_CFLAGS+= \$(shell pkg-config --cflags libprotobuf-c 2>/dev/null) -I${PROTOCOL_DIR} -I${SCRIPT_DIR}/../../deps" src/Makefile
 
 # Add -lprotobuf-c to link line (before PROTO_OBJS placeholder)
 sed -i '/^\$(REDIS_CLI_NAME): \$(REDIS_CLI_OBJ)/,/^$/{ s|$(TLS_CLIENT_LIBS)|& -lprotobuf-c PROTO_OBJS_PLACEHOLDER|; }' src/Makefile

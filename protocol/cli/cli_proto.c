@@ -489,6 +489,96 @@ sds cli_proto_translate_pattern(const char *pattern)
     return sdsnew(pattern);
 }
 
+/* ── MONITOR 筛选器 ── */
+
+static sds g_monitor_filter = NULL;   /* 人类可读 pattern，NULL=不过滤 */
+
+void cli_proto_monitor_set_filter(const char *pattern)
+{
+    if (g_monitor_filter) { sdsfree(g_monitor_filter); g_monitor_filter = NULL; }
+    if (!pattern || !pattern[0]) return;
+    g_monitor_filter = sdsnew(pattern);
+}
+
+/*
+ * Proto-decode key → 人类可读字符串（如 "sw=0,port=1"）
+ * 返回 malloc 的字符串，无法解码返回 NULL。
+ */
+static char *proto_decode_key(const uint8_t *raw, size_t len)
+{
+    for (int i = 0; i < g_proto_reg_count; i++) {
+        const proto_reg_t *r = &g_proto_reg[i];
+        size_t preflen = strlen(r->prefix);
+        if (len < preflen || memcmp(raw, r->prefix, preflen) != 0)
+            continue;
+
+        ProtobufCMessage *kmsg = protobuf_c_message_unpack(
+            r->key_desc, NULL, len - preflen, raw + preflen);
+        if (!kmsg) return NULL;
+
+        char buf[512];
+        int off = snprintf(buf, sizeof(buf), "%s", r->prefix);
+        const ProtobufCMessageDescriptor *d = kmsg->descriptor;
+        for (unsigned j = 0; j < d->n_fields; j++) {
+            const ProtobufCFieldDescriptor *fd = &d->fields[j];
+            if (fd->type == PROTOBUF_C_TYPE_MESSAGE) continue;
+            const uint8_t *base = (const uint8_t *)kmsg;
+            const void    *ptr  = base + fd->offset;
+            if (off > 0) buf[off++] = ',';
+            off += snprintf(buf + off, sizeof(buf) - (size_t)off,
+                            "%s=", fd->name);
+            switch (fd->type) {
+            case PROTOBUF_C_TYPE_UINT32:
+                off += snprintf(buf + off, sizeof(buf) - (size_t)off,
+                                "%u", *(const uint32_t *)ptr); break;
+            case PROTOBUF_C_TYPE_INT32:
+                off += snprintf(buf + off, sizeof(buf) - (size_t)off,
+                                "%d", *(const int32_t *)ptr); break;
+            case PROTOBUF_C_TYPE_STRING:
+                off += snprintf(buf + off, sizeof(buf) - (size_t)off,
+                                "%s", *(const char *const *)ptr ?: ""); break;
+            default: break;
+            }
+        }
+        protobuf_c_message_free_unpacked(kmsg, NULL);
+        return strdup(buf);
+    }
+    return NULL;
+}
+
+static int monitor_key_matches_filter(const uint8_t *key, size_t klen)
+{
+    if (!g_monitor_filter) return 1;
+
+    char *decoded = proto_decode_key(key, klen);
+    const char *subject = decoded ? decoded : (const char *)key;
+    size_t slen = decoded ? strlen(decoded) : klen;
+
+    const char *f = g_monitor_filter;
+    const char *end = f + sdslen(g_monitor_filter);
+    int ok = 1;
+
+    while (f < end && ok) {
+        while (f < end && *f == '*') f++;
+        if (f >= end) break;
+
+        const char *seg_end = f;
+        while (seg_end < end && *seg_end != '*') seg_end++;
+        size_t seglen = (size_t)(seg_end - f);
+        if (seglen == 0) { f = seg_end; continue; }
+
+        int found = 0;
+        for (size_t i = 0; i + seglen <= slen; i++) {
+            if (memcmp(subject + i, f, seglen) == 0) { found = 1; break; }
+        }
+        if (!found) ok = 0;
+        f = seg_end;
+    }
+
+    free(decoded);
+    return ok;
+}
+
 /* ════════════════════════════════════════════════════════
  * Compact single-line print (for MONITOR)
  * ════════════════════════════════════════════════════════ */
@@ -583,6 +673,12 @@ static void try_print_proto_compact(const uint8_t *raw_key, size_t klen,
 
         printf("\" ");
 
+        /* 无 payload（如 GET/DEL）→ 只打印 key */
+        if (!raw_payload || plen == 0) {
+            printf("\n");
+            return;
+        }
+
         /* Parse payload compact */
         ProtobufCMessage *emsg = protobuf_c_message_unpack(
             r->entry_desc, NULL, plen, raw_payload);
@@ -592,7 +688,10 @@ static void try_print_proto_compact(const uint8_t *raw_key, size_t klen,
             printf("\"");
             protobuf_c_message_free_unpacked(emsg, NULL);
         } else {
-            printf("?");
+            printf("RAW=");
+            for (size_t j = 0; j < plen && j < 32; j++)
+                printf("%02x", raw_payload[j]);
+            if (plen > 32) printf("..");
         }
         printf("\n");
         return;
@@ -600,8 +699,10 @@ static void try_print_proto_compact(const uint8_t *raw_key, size_t klen,
 
     /* No match: hex */
     printf("%.*s ", (int)klen, raw_key);
-    for (size_t j = 0; j < plen && j < 64; j++) printf("%02x", raw_payload[j]);
-    if (plen > 64) printf("...");
+    if (raw_payload && plen > 0) {
+        for (size_t j = 0; j < plen && j < 64; j++) printf("%02x", raw_payload[j]);
+        if (plen > 64) printf("...");
+    }
     printf("\n");
 }
 
@@ -648,17 +749,17 @@ void cli_proto_format_monitor_line(const char *line)
 {
     if (!line) return;
 
+    /* MONITOR filter: 简单的文本包含匹配 */
+    if (g_monitor_filter && !strstr(line, g_monitor_filter))
+        return;
+
     /* Extract prefix "TIMESTAMP [DB CLIENT]" */
     const char *bend = strchr(line, ']');
-    if (!bend) return;
+    if (!bend) { puts(line); fflush(stdout); return; }
     size_t plen = (size_t)(bend - line) + 1;
 
     /* Skip "OK" sentinel */
     if (plen <= 3 && strncmp(line, "OK", 2) == 0) return;
-
-    /* Print timestamp + bracket */
-    fwrite(line, 1, plen, stdout);
-    printf(" ");
 
     /* Parse quoted args after bracket */
     const char *p = bend + 1;
@@ -666,7 +767,7 @@ void cli_proto_format_monitor_line(const char *line)
 
     char **args = malloc(16 * sizeof(char *));
     int na = 0, ca = 16;
-    if (!args) return;
+    if (!args) { puts(line); fflush(stdout); return; }
 
     while (*p) {
         if (*p != '"') { p++; continue; }
@@ -682,29 +783,63 @@ void cli_proto_format_monitor_line(const char *line)
         if (*p == '"') p++;
     }
 
-    if (na < 3) goto cleanup;
+    if (na < 2) { puts(line); fflush(stdout); goto cleanup; }
 
     const char *cmd = args[0];
+
+    /*
+     * 支持的命令：SET/GET/DEL/HSET/HGET/PUBLISH
+     *   SET/HSET/PUBLISH → 尝试 proto 解析 key + value
+     *   GET/DEL/HGET    → 尝试 proto 解析 key，value 原样
+     *
+     * 命令 → 参数映射：
+     *   cmd      args[1]    args[2]     args[3]
+     *   SET      key        val
+     *   GET      key
+     *   DEL      key
+     *   HSET     key        field       val
+     *   HGET     key        field
+     *   PUBLISH  channel    msg
+     */
+    int has_val = 0;
     const char *key = NULL;
-    const char *payload = NULL;
+    const char *val = NULL;
 
     if (!strcasecmp(cmd, "set")) {
-        key = args[1]; payload = args[2];
+        key = args[1]; val = args[2]; has_val = (na >= 3);
+    } else if (!strcasecmp(cmd, "hset")) {
+        key = args[1]; val = args[3]; has_val = (na >= 4);
+    } else if (!strcasecmp(cmd, "get") || !strcasecmp(cmd, "del")) {
+        key = args[1]; has_val = 0;
+    } else if (!strcasecmp(cmd, "hget")) {
+        key = args[1]; has_val = 0;
     } else if (!strcasecmp(cmd, "publish")) {
+        /* channel 格式: __keyspace@0__:s_xxx/... → 提取 key 部分 */
         key = strrchr(args[1], ':');
         key = key ? key + 1 : args[1];
-        payload = args[2];
+        val = args[2]; has_val = (na >= 3);
     }
 
-    if (key && payload) {
-        printf("\"%s\" ", cmd);
-        size_t klen = 0, plen = 0;
+    if (key) {
+        size_t klen = 0, vlen = 0;
         uint8_t *rk = unescape_c_string(key, &klen);
-        uint8_t *rp = unescape_c_string(payload, &plen);
-        if (rk && rp && plen > 0)
-            try_print_proto_compact(rk, klen, rp, plen);
-        free(rk); free(rp);
+        uint8_t *rv = (val && has_val) ? unescape_c_string(val, &vlen) : NULL;
+
+        if (rk) {
+            fwrite(line, 1, plen, stdout);
+            printf(" \"%s\" ", cmd);
+            if (rv && vlen > 0)
+                try_print_proto_compact(rk, klen, rv, vlen);
+            else
+                try_print_proto_compact(rk, klen, NULL, 0);
+        }
+        free(rk); free(rv);
+        goto cleanup;
     }
+
+    /* 不支持的命令 → 打印原始行 */
+    puts(line);
+    fflush(stdout);
 
 cleanup:
     for (int i = 0; i < na; i++) free(args[i]);

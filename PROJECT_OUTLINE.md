@@ -17,7 +17,7 @@
 |------|------|------|
 | 消息总线 | Redis 8.0 | KV 存储 + Pub/Sub 事件通知 |
 | 数据格式 | protobuf-c 1.5 | 跨语言序列化，强类型校验 |
-| Redis 客户端 | hiredis 1.2 | C 语言 Redis 异步/同步驱动 |
+| Redis 客户端 | hiredis 1.2 (submodule) | C 语言 Redis 驱动 |
 | 构建系统 | CMake 3.10+ | 全量编译 / 单模块独立构建 |
 | 编译工具链 | GCC 15.2 | C 语言编译 |
 
@@ -67,8 +67,8 @@ lite_switch/
 ├── modules/                    # 各层模块
 │   ├── CMakeLists.txt          # 顶层构建入口（aggregate.cmake 聚合子目录）
 │   ├── 1.UI/                   # 用户接口层
-│   │   ├── 1.CLI/              # CLI 模块（待实现）
-│   │   └── 2.Web/              # Web 管理界面（待实现）
+│   │   ├── 1.CLI              # CLI 模块（待实现）
+│   │   └── 1.Web/              # Web 管理界面（待实现）
 │   ├── 2.PI/                   # 协议控制层（待实现）
 │   ├── 3.PD/                   # 数据处理层
 │   │   ├── CMakeLists.txt      # aggregate.cmake 自动遍历子目录
@@ -82,7 +82,7 @@ lite_switch/
 │   │   │   └── receiver/
 │   │   │       ├── CMakeLists.txt
 │   │   │       └── main.c      # 订阅 keyspace → 回调打印 → del 时退出
-│   │   └── 4.SDA/              # SDK 透传层（待实现）
+│   │   └── 4.SDA              # SDK 透传层（已完成）
 │   │       └── (ies_sda 适配层)
 └── scripts/                    # 构建和运维脚本（待扩展）
 ```

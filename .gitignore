@@ -23,3 +23,9 @@ modules/3.PD/4.SDA/sdk/
 
 #  Auto-generated proto registry (gen_proto_registry.sh)
 protocol/cli/proto_registry.c
+# Temporary files
+*.tmp
+/tmp/
+
+# Git submodules (tracked via .gitmodules)
+deps/

@@ -18,21 +18,23 @@
 
 ## 依赖
 
-| 依赖 | 版本要求 | 用途 |
-|------|---------|------|
-| CMake | >= 3.10 | 构建系统 |
-| GCC | >= 13 | C 编译器 |
-| Redis | >= 6.0 | 消息总线（KV 存储 + Pub/Sub） |
-| hiredis | >= 1.0 | C Redis 客户端库 |
-| protobuf-c | >= 1.4 | Protobuf C 运行时库 |
-| protobuf-compiler (protoc) | >= 3.0 | .proto 编译器 |
-| protoc-gen-c | >= 1.4 | protobuf-c 代码生成插件 |
-| pkg-config | 任意 | 依赖查找 |
+| 依赖 | 版本要求 | 用途 | 来源 |
+|------|---------|------|------|
+| CMake | >= 3.10 | 构建系统 | 系统 |
+| GCC | >= 13 | C 编译器 | 系统 |
+| Redis | >= 6.0 | 消息总线（KV + Pub/Sub） | 系统 |
+| hiredis | 1.2.0 | Redis C 客户端 | **git submodule** (`deps/hiredis`) |
+| zlog | 1.2.18 | 结构化日志 | **git submodule** (`deps/zlog`) |
+| protobuf-c | >= 1.4 | Protobuf C 运行时 | 系统 (`apt install libprotobuf-c-dev protobuf-c-compiler`) |
+| protoc-gen-c | >= 1.4 | .proto 编译器插件 | 系统 |
 
-### 安装依赖
+### 克隆 & 编译
 
 ```bash
-sudo ./scripts/install_deps.sh
+git clone --recurse-submodules https://github.com/xxx/lite_switch.git
+cd lite_switch
+./scripts/install_deps.sh     # 安装系统依赖（protobuf-c）
+./build.sh                     # 全量编译
 ```
 
 ### 校验依赖
@@ -47,110 +49,42 @@ sudo ./scripts/install_deps.sh
 lite_switch/
 ├── README.md
 ├── PROJECT_OUTLINE.md          # 项目开发大纲
+├── DEVELOPMENT.md              # 开发进度跟踪
 ├── build.sh                    # 编译 / 清理控制脚本
-├── cmake/
-│   ├── comp_base.cmake         # 单组件编译宏（自动链接 middleware + protocol）
-│   └── aggregate.cmake         # 模块聚合器（自动发现子目录并编译）
+├── cmake/                      # CMake 辅助模块
+│   ├── comp_base.cmake         # 单组件编译宏
+│   └── aggregate.cmake         # 模块聚合器
+├── deps/                       # git submodule 外部依赖
+│   ├── hiredis/                # Redis C 客户端 (BSD 3-Clause)
+│   └── zlog/                   # 日志库 (Apache 2.0)
 ├── middleware/                  # 中间件层 (libmiddleware.so)
-│   ├── include/middleware.h    # 公开 API：Redis 连接、KV 操作、Pub/Sub 发布/订阅
-│   └── src/middleware.c        # 基于 hiredis + protobuf-c 实现
 ├── protocol/                   # Protobuf 定义与编译 (liblight_protocol.a)
-│   ├── proto/                  # .proto 源文件
-│   ├── include/                # 编译产物（自动生成）
-│   └── cli/                    # redis-cli-proto（proto 感知 CLI 诊断工具）
 └── modules/                    # 各层模块
-    ├── 1.UI/                   # 用户接口层（待实现）
-    ├── 2.PI/                   # 协议控制层（待实现）
-    ├── 3.PD/                   # 数据处理层
-    │   ├── 3.test/             # Pub/Sub 回调模型验证
-    │   │   ├── publisher/      # SET → sleep → DEL
-    │   │   └── receiver/       # 订阅 keyspace → 回调打印（含 index 验证）
-    │   └── 4.SDA/              # SDK 透传守护进程
-    ├── 4.SDA/                  # 硬件适配层（待实现）
-    └── CMakeLists.txt          # 顶层构建入口
+    ├── 1.UI/1.Web/             # Web 状态页面 (switch-web)
+    ├── 3.PD/
+    │   ├── 3.test/             # 测试模块 (publisher/receiver/scanner)
+    │   └── 4.SDA/              # SDK 透传守护进程 (sda)
+    └── ...
 ```
 
 ## 编译
 
-### 全量编译
-
 ```bash
-# Debug 编译（默认）
-./build.sh
-
-# 或显式指定
-./build.sh build
-
-# Release 编译
-./build.sh release
+./build.sh          # Debug 编译（默认）
+./build.sh release  # Release 编译
+./build.sh clean    # 清理所有产物
 ```
 
-编译产物：
-- 可执行文件：`modules/build/bin/`
-- 动态库：`modules/build/lib/`
-- `compile_commands.json` 自动同步到项目根目录，供 clangd 使用
-
-### 清理
-
-```bash
-./build.sh clean
+产物：
 ```
-
-### 单模块独立编译
-
-每个子模块均可独立编译，以 `protocol` 为例：
-
-```bash
-cd protocol
-cmake -B build
-cmake --build build
-# 产物：build/liblight_protocol.a
+modules/build/bin/
+├── publisher           # 注入 PdInterface 测试数据
+├── receiver            # Pub/Sub 回调验证
+├── scanner             # mw_scan 存量发现
+├── sda                 # SDK 透传守护进程
+├── switch-web          # Web 状态页面 (端口 8080)
+└── redis-cli-proto     # Proto 感知 CLI 诊断工具
 ```
-
-## 运行测试
-
-确保 Redis 服务已启动：
-
-```bash
-# 启动 Redis（如未运行）
-redis-server --daemonize yes
-```
-
-在两个终端中分别运行：
-
-**终端 1 — 启动 receiver（订阅者）：**
-
-```bash
-./modules/build/bin/receiver
-```
-
-**终端 2 — 运行 publisher（发布者）：**
-
-```bash
-./modules/build/bin/publisher
-```
-
-publisher 会发送一条消息（SET），等待 3 秒后删除（DEL），receiver 将打印收到的消息并在收到 DEL 事件后退出。
-
-### redis-cli-proto 诊断
-
-基于 Redis 8.0.5 原生 CLI + protobuf 反射，零硬编码：
-
-```bash
-# 启动 proto 模式 REPL
-./modules/build/bin/redis-cli-proto --proto
-
-# 查看接口数据（自动翻译 key/value）
-GET "s_pd_interface/sw=0,port=1"
-
-# 修改接口配置（key + value 均从人类可读编码）
-SET "s_pd_interface/sw=0,port=2" "admin_mode=ADMIN_DOWN,link_state=LINK_DOWN,mtu=1500"
-
-# 监控 proto 消息（紧凑单行显示）
-MONITOR
-```
-
-详见 [`protocol/README.md`](protocol/README.md)。
 
 ## 添加新模块
 
@@ -171,28 +105,18 @@ unset(_d)
 add_light_component(my_module main.c)
 ```
 
-3. 重新执行 `./build.sh` 即可
-
 ## 添加新 Proto
 
 1. 在 `protocol/proto/<type>/` 下创建 `xxx.proto`（proto3 语法）
 2. 重新编译，CMake 会自动发现新文件并生成对应的 `.pb-c.c/.h`
-3. C 代码中引用：
-
-```c
-#include "<type>/xxx.pb-c.h"
-
-MyMessage msg = MY_MESSAGE__INIT;
-```
-
-无需手动修改 CMakeLists.txt。
 
 ## 技术栈
 
 | 组件 | 选型 | 用途 |
 |------|------|------|
-| 消息总线 | Redis | KV 存储 + Pub/Sub 事件通知 |
+| 消息总线 | Redis 8.0 | KV 存储 + Pub/Sub 事件通知 |
 | 数据格式 | protobuf-c | 跨语言序列化，强类型校验 |
-| Redis 客户端 | hiredis | C 语言 Redis 异步/同步驱动 |
+| Redis 客户端 | hiredis (submodule) | C 语言 Redis 驱动 |
+| 日志 | zlog (submodule) | 结构化日志，按进程分目录 |
 | 构建系统 | CMake 3.10+ | 全量编译 / 单模块独立构建 |
 | 编译器 | GCC | C 语言编译 |

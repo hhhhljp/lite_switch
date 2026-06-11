@@ -28,4 +28,7 @@ sds cli_proto_encode_entry_value(const char *human_key, const char *value_fields
 /* 将 glob pattern 中的 proto 路径转为二进制前缀 (丢弃字段过滤) */
 sds cli_proto_translate_pattern(const char *pattern);
 
+/* 设置 MONITOR 筛选器（proto 人类可读 pattern，传 NULL 清空） */
+void cli_proto_monitor_set_filter(const char *pattern);
+
 #endif

@@ -48,6 +48,8 @@ do_clean() {
 # 编译
 # ──────────────────────────────────────────────
 do_build() {
+    # 初始化 git submodule（首次克隆后需要）
+    git submodule update --init --recursive 2>/dev/null || true
     local build_type="$1"    # Debug | Release
     local sda_no_hw="$2"     # ON=仿真  OFF=真实硬件
 
