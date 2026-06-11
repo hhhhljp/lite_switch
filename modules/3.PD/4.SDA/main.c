@@ -5,10 +5,15 @@
 #include <unistd.h>
 
 #include "middleware.h"
+#include <zlog.h>
 #include "sda_core.h"
 #include "init/sdk_init.h"
 #include "intf/intf_api.h"
 #include "intf/intf_cb.h"
+#include "intf/intf_event.h"
+#ifdef SDA_NO_HW
+#include "event/sda_event_sim.h"
+#endif
 
 /*
  * main.c — SDA 守护进程主程序（三阶段初始化框架）
@@ -81,10 +86,29 @@ static const sw_init_fn_t sw_init_fns[] = {
 };
 
 /* ── Phase 3: 自定义初始化任务 ── */
+#ifdef SDA_NO_HW
+static void sda_sim_init_and_run(mw_context_t *ctx);
+#endif
+
 static const custom_init_fn_t custom_init_fns[] = {
-    sda_interface_poll_all,   /* 接口信息上报 (NO_HW 时注入测试数据) */
+    sda_interface_poll_all,   /* 接口信息上报 (NO_HW 时注入初始数据) */
+#ifdef SDA_NO_HW
+    sda_sim_init_and_run,     /* ★ 注册模拟生成器 + 启动模拟循环（阻塞） */
+#endif
     NULL
 };
+
+/* ── NO_HW 模拟器启动（阻塞） ── */
+#ifdef SDA_NO_HW
+static void sda_sim_init_and_run(mw_context_t *ctx)
+{
+    (void)ctx;
+    /* 注册各模块的模拟事件生成器 */
+    intf_sim_register_all();
+    /* 启动模拟循环（阻塞，替代 mw_poll） */
+    sda_sim_run(g_sda_ctx, 1000, &g_running);
+}
+#endif
 
 /* ══════════════════════════════════════════════════════════
  * 主函数
@@ -100,6 +124,9 @@ int main(void)
         fprintf(stderr, "sda: signal setup failed\n");
         return 1;
     }
+
+    mw_log_init("sda");
+    dzlog_info("sda: starting (pid=%d)", getpid());
 
     /* ── Phase 1: 硬件初始化 ── */
     printf("sda: phase 1 — hardware init\n");
@@ -127,10 +154,15 @@ int main(void)
     }
 
     /* ── 事件循环 ── */
+#ifdef SDA_NO_HW
+    /* NO_HW: 模拟循环已在 Phase 3 的 sda_sim_init_and_run() 中启动 */
+    /* （该函数阻塞不返回，不会到达此处） */
+#else
     printf("sda: waiting for events...\n");
     while (g_running) {
         mw_poll(g_sda_ctx, 1000);
     }
+#endif
 
     /* ── 正常退出 ── */
     printf("sda: shutting down...\n");

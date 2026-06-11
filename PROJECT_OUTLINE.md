@@ -101,7 +101,8 @@ lite_switch/
 │           ├── CMakeLists.txt
 │           ├── main.c           # 三阶段初始化 + 事件循环
 │           ├── init/sdk_init.c  # SDK 初始化
-│           └── intf/            # interface 子模块（API + Callback）
+│           ├── intf/            # interface 子模块（API + Callback + Event）
+│           └── event/           # ★ 事件框架（路由 + 动作链 + NO_HW 模拟）
 └── scripts/                    # 构建和运维脚本
     ├── install_deps.sh          # 安装系统依赖（protobuf-c）
     └── check_deps.sh            # 校验依赖就绪状态
@@ -242,7 +243,7 @@ add_light_component(my_module main.c)
 | publisher | `modules/3.PD/3.test/publisher/` | 注入 PdInterface 测试数据（使用 mw_set_message） |
 | receiver | `modules/3.PD/3.test/receiver/` | 订阅 keyspace → 回调打印 |
 | scanner | `modules/3.PD/3.test/scanner/` | ★ mw_scan 存量发现 → subscribe → mw_poll 统一消费 |
-| sda | `modules/3.PD/4.SDA/` | SDK 透传守护进程，三阶段初始化框架 |
+| sda | `modules/3.PD/4.SDA/` | SDK 透传守护进程，三阶段初始化框架，事件路由 + NO_HW 模拟 |
 | switch-web | `modules/1.UI/1.Web/` | ★ HTTP + SSE 端口状态页面（端口 8080） |
 | redis-cli-proto | `modules/build/bin/` | Proto 感知 CLI 诊断工具 |
 
@@ -252,6 +253,7 @@ add_light_component(my_module main.c)
 
 | 优先级 | 模块 | 路径 | 职责 |
 |--------|------|------|------|
+| **P0** | SDA 实机验证 | `modules/3.PD/4.SDA/` | 新初始化流程 + 事件回调在 FM10840 上验证 |
 | P1 | Bridge | `modules/3.PD/1.Bridge/` | 硬件资源抽象，状态缓存，操作编排 |
 | P2 | Route | `modules/3.PD/2.Route/` | 路由表管理 |
 | P3 | PI | `modules/2.PI/` | VLAN/LAG/STP 协议控制逻辑 |

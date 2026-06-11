@@ -2,6 +2,7 @@
 #define SDA_CORE_H
 
 #include "middleware.h"
+#include "sda_event.h"
 
 /*
  * sda_core.h — SDA 模块核心定义

@@ -21,6 +21,9 @@ set(SDA_SRCS
     init/sdk_init.c
     intf/intf_api.c
     intf/intf_cb.c
+    intf/intf_event.c
+    event/sda_event_sim.c
+    event/sda_event.c
 )
 
 # ── 使用 add_light_component 宏创建可执行文件 ──
@@ -31,6 +34,7 @@ add_light_component(sda ${SDA_SRCS})
 target_include_directories(sda PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/event
 )
 
 # ── 编译选项 ──
