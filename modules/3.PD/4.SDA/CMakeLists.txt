@@ -49,15 +49,32 @@ target_compile_definitions(sda PRIVATE
 if(SDA_NO_HW)
     target_compile_definitions(sda PRIVATE SDA_NO_HW)
 else()
-    # 硬件模式：需要 SDK 头文件和库
+    # ── 硬件模式：SDK 路径配置 ──
+    # SDA_SDK_ROOT: SDK 安装根目录（ies/ 的父目录或直接 ies/）
+    #   默认: ${CMAKE_CURRENT_SOURCE_DIR}/sdk（本地的头文件副本，gitignored）
+    #   实机: cmake -DSDA_SDK_ROOT=/opt/intel/fm10k/ies ..
+    if(NOT DEFINED SDA_SDK_ROOT)
+        set(SDA_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/sdk")
+    endif()
+    if(EXISTS "${SDA_SDK_ROOT}/include")
+        set(_sdk_inc "${SDA_SDK_ROOT}/include")
+    else()
+        set(_sdk_inc "${SDA_SDK_ROOT}")
+    endif()
+
     target_include_directories(sda PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/alos
-        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/alos/linux
-        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/platforms/libertyTrail
-        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/support
+        ${_sdk_inc}
+        ${_sdk_inc}/alos
+        ${_sdk_inc}/alos/linux
+        ${_sdk_inc}/platforms/libertyTrail
+        ${_sdk_inc}/support
     )
-    target_link_directories(sda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sdk/lib)
+
+    # 库路径：默认 ${SDA_SDK_ROOT}/lib，可单独覆盖
+    if(NOT DEFINED SDA_SDK_LIB)
+        set(SDA_SDK_LIB "${SDA_SDK_ROOT}/lib")
+    endif()
+    target_link_directories(sda PRIVATE ${SDA_SDK_LIB})
     target_link_libraries(sda
         FocalpointSDK
         LTStdPlatform

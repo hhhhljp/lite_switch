@@ -65,7 +65,8 @@ do_build() {
           -B "${BUILD_DIR}" \
           -DCMAKE_BUILD_TYPE="${build_type}" \
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-          -DSDA_NO_HW="${sda_no_hw}"
+          -DSDA_NO_HW="${sda_no_hw}" \
+          ${EXTRA_CMAKE_ARGS:-}
 
     echo ""
     echo "==> 开始编译..."
